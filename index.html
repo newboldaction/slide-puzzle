@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>スライドパズルゲーム</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            overscroll-behavior: none; /* Prevents pull-to-refresh on mobile */
+        }
+        .puzzle-piece {
+            background-size: cover;
+            background-repeat: no-repeat;
+            border: 1px solid #ccc;
+            box-sizing: border-box;
+            cursor: pointer;
+            transition: transform 0.2s ease-in-out, opacity 0.2s ease-in-out;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: bold;
+            color: white;
+            text-shadow: 1px 1px 2px black;
+        }
+        .empty-piece {
+            background: #e0e0e0;
+            opacity: 0.5;
+        }
+        .puzzle-grid {
+            display: grid;
+            border: 2px solid #333;
+            aspect-ratio: 1 / 1; /* Maintain square aspect ratio */
+            max-width: 500px; /* Limit max width */
+            width: 90vw; /* Responsive width */
+            margin: 0 auto;
+        }
+        .modal {
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        #preview-image-container img {
+            max-width: 90%;
+            max-height: 400px;
+            border: 2px solid #333;
+            border-radius: 8px;
+        }
+        .disabled-button {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        /* Tailwind custom font */
+        .font-inter { font-family: "Inter", sans-serif; }
+
+        /* Add some fun styling to buttons */
+        .game-button {
+            @apply bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition-all duration-150 ease-in-out transform hover:scale-105;
+        }
+        .game-button-green {
+            @apply bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition-all duration-150 ease-in-out transform hover:scale-105;
+        }
+         .game-button-orange {
+            @apply bg-orange-500 hover:bg-orange-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition-all duration-150 ease-in-out transform hover:scale-105;
+        }
+        .game-button-red {
+            @apply bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition-all duration-150 ease-in-out transform hover:scale-105;
+        }
+        .ranking-item {
+            @apply bg-gray-100 p-2 rounded-md mb-1 text-sm;
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-r from-blue-100 via-indigo-100 to-purple-100 min-h-screen flex flex-col items-center p-4 font-inter">
+
+    <div class="container bg-white p-6 rounded-xl shadow-2xl w-full max-w-3xl">
+        <header class="text-center mb-6">
+            <h1 class="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-500 to-purple-600">スライドパズルゲーム</h1>
+        </header>
+
+        <div class="controls grid grid-cols-2 sm:grid-cols-3 gap-4 mb-6 items-center">
+            <div>
+                <label for="image-select" class="block text-sm font-medium text-gray-700">イラスト:</label>
+                <select id="image-select" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                    </select>
+            </div>
+            <div>
+                <label for="difficulty-select" class="block text-sm font-medium text-gray-700">むずかしさ:</label>
+                <select id="difficulty-select" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                    <option value="2">2x2 (かんたん)</option>
+                    <option value="3" selected>3x3 (ふつう)</option>
+                    <option value="4">4x4 (むずかしい)</option>
+                    <option value="5">5x5 (すごくむずかしい)</option>
+                </select>
+            </div>
+            <div class="flex flex-col sm:flex-row sm:items-end gap-2 col-span-2 sm:col-span-1">
+                 <button id="start-button" class="game-button w-full sm:w-auto">スタート</button>
+            </div>
+        </div>
+        
+        <div class="game-info grid grid-cols-2 gap-4 mb-4 text-center">
+            <div id="timer" class="text-lg font-semibold text-indigo-600 bg-indigo-100 p-2 rounded-md">時間: 0秒</div>
+            <div id="moves-counter" class="text-lg font-semibold text-purple-600 bg-purple-100 p-2 rounded-md">手数: 0回</div>
+        </div>
+        
+        <div class="action-buttons flex justify-center space-x-4 mb-4">
+             <button id="reset-button" class="game-button-orange">リセット</button>
+             <button id="preview-button" class="game-button-green">お手本</button>
+        </div>
+
+
+        <div id="puzzle-area" class="puzzle-grid mb-6 shadow-lg rounded-md overflow-hidden">
+            </div>
+        
+        <div id="preview-image-container" class="modal" style="display:none;">
+            <div class="modal-content">
+                <img id="preview-image-element" src="" alt="お手本画像" class="rounded-md shadow-lg">
+                <button id="close-preview-button" class="mt-4 game-button-red">とじる</button>
+            </div>
+        </div>
+
+
+        <div class="ranking-section mt-8">
+            <h2 class="text-2xl font-semibold text-center mb-4 text-gray-700">ランキング</h2>
+            <div id="ranking-list" class="space-y-2 max-h-60 overflow-y-auto p-2 bg-gray-50 rounded-lg">
+                <p class="text-gray-500 text-center">ランキングを読み込み中...</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="name-modal" class="modal" style="display:none;">
+        <div class="modal-content p-6 rounded-lg shadow-xl">
+            <h2 class="text-2xl font-bold text-green-500 mb-4">クリア！おめでとう！</h2>
+            <p class="text-lg mb-1">タイム: <span id="final-time" class="font-semibold"></span>秒</p>
+            <p class="text-lg mb-4">手数: <span id="final-moves" class="font-semibold"></span>回</p>
+            <label for="player-name" class="block text-sm font-medium text-gray-700 mb-1">名前を入力してください (10文字以内):</label>
+            <input type="text" id="player-name" maxlength="10" class="w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 mb-4">
+            <button id="submit-score-button" class="game-button-green w-full">記録する</button>
+            <button id="cancel-score-button" class="mt-2 bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg w-full">あとで</button>
+        </div>
+    </div>
+    
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, query, orderBy, limit, onSnapshot, serverTimestamp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-slide-puzzle-app';
+        
+        let app;
+        let db;
+        let auth;
+        let userId = null;
+
+        // --- Game Elements ---
+        const imageSelect = document.getElementById('image-select');
+        const difficultySelect = document.getElementById('difficulty-select');
+        const startButton = document.getElementById('start-button');
+        const resetButton = document.getElementById('reset-button');
+        const previewButton = document.getElementById('preview-button');
+        const closePreviewButton = document.getElementById('close-preview-button');
+        const timerDisplay = document.getElementById('timer');
+        const movesCounter = document.getElementById('moves-counter');
+        const puzzleArea = document.getElementById('puzzle-area');
+        const previewImageContainer = document.getElementById('preview-image-container');
+        const previewImageElement = document.getElementById('preview-image-element');
+        const rankingList = document.getElementById('ranking-list');
+        const nameModal = document.getElementById('name-modal');
+        const finalTimeDisplay = document.getElementById('final-time');
+        const finalMovesDisplay = document.getElementById('final-moves');
+        const playerNameInput = document.getElementById('player-name');
+        const submitScoreButton = document.getElementById('submit-score-button');
+        const cancelScoreButton = document.getElementById('cancel-score-button');
+
+        // --- Game State ---
+        let gridSize = 3; // Default 3x3
+        let pieces = [];
+        let emptySlot = { row: 0, col: 0 };
+        let timerInterval;
+        let seconds = 0;
+        let moves = 0;
+        let gameStarted = false;
+        let currentImageSrc = '';
+        let currentImageName = '';
+        let pieceSize = 0; // Calculated based on puzzleArea size and gridSize
+
+        const images = [
+            { name: "ネコ", url: "https://placehold.co/400x400/FFA07A/000000?text=ネコ" },
+            { name: "イヌ", url: "https://placehold.co/400x400/ADD8E6/000000?text=イヌ" },
+            { name: "電車", url: "https://placehold.co/400x400/90EE90/000000?text=電車" },
+            { name: "リンゴ", url: "https://placehold.co/400x400/FFB6C1/000000?text=リンゴ" },
+            { name: "お花", url: "https://placehold.co/400x400/FFFFE0/000000?text=お花" },
+            // Add up to 30 images here
+        ];
+
+        // --- Firebase Initialization ---
+        async function initFirebase() {
+            if (!firebaseConfig) {
+                console.warn("Firebase config is not available. Ranking will be disabled.");
+                rankingList.innerHTML = '<p class="text-red-500 text-center">ランキング機能は利用できません。(設定エラー)</p>';
+                return;
+            }
+            try {
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                setLogLevel('debug');
+
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        console.log("User signed in with UID:", userId);
+                        loadRankings();
+                    } else {
+                        userId = 'anonymous-' + crypto.randomUUID();
+                        console.log("User is signed out or anonymous session:", userId);
+                        rankingList.innerHTML = '<p class="text-orange-500 text-center">匿名ユーザーのため、ランキングの一部機能が制限される場合があります。</p>';
+                        loadRankings(); 
+                    }
+                });
+            } catch (error) {
+                console.error("Firebase initialization error:", error);
+                rankingList.innerHTML = `<p class="text-red-500 text-center">ランキングの読み込みに失敗しました: ${error.message}</p>`;
+            }
+        }
+        
+        // --- Game Logic ---
+        function populateImageSelect() {
+            images.forEach(img => {
+                const option = document.createElement('option');
+                option.value = img.url;
+                option.textContent = img.name;
+                imageSelect.appendChild(option);
+            });
+            if (images.length > 0) {
+                currentImageSrc = images[0].url;
+                currentImageName = images[0].name;
+            }
+        }
+
+        function calculatePieceSize() {
+            const puzzleAreaWidth = puzzleArea.clientWidth;
+            pieceSize = puzzleAreaWidth / gridSize;
+        }
+
+        function createPieces() {
+            pieces = [];
+            for (let r = 0; r < gridSize; r++) {
+                for (let c = 0; c < gridSize; c++) {
+                    const pieceId = r * gridSize + c;
+                    if (pieceId === gridSize * gridSize - 1) { // Last piece is empty
+                        emptySlot = { row: r, col: c };
+                        pieces.push({ id: pieceId, originalRow: r, originalCol: c, currentRow: r, currentCol: c, isEmpty: true });
+                    } else {
+                        pieces.push({ id: pieceId, originalRow: r, originalCol: c, currentRow: r, currentCol: c, isEmpty: false });
+                    }
+                }
+            }
+        }
+
+        function shufflePieces() {
+            let shuffleMoves = Math.pow(gridSize, 3) * 5; 
+            if (gridSize === 2) shuffleMoves = 20; 
+            if (gridSize === 5) shuffleMoves = Math.pow(gridSize, 3) * 2;
+
+            for (let i = 0; i < shuffleMoves; i++) {
+                const neighbors = [];
+                const { row, col } = emptySlot;
+
+                if (row > 0) neighbors.push({ row: row - 1, col: col }); 
+                if (row < gridSize - 1) neighbors.push({ row: row + 1, col: col }); 
+                if (col > 0) neighbors.push({ row: row, col: col - 1 }); 
+                if (col < gridSize - 1) neighbors.push({ row: row, col: col + 1 }); 
+                
+                if (neighbors.length > 0) {
+                    const randomNeighbor = neighbors[Math.floor(Math.random() * neighbors.length)];
+                    const pieceToMove = pieces.find(p => p.currentRow === randomNeighbor.row && p.currentCol === randomNeighbor.col);
+                    const emptyPiece = pieces.find(p => p.isEmpty);
+
+                    [pieceToMove.currentRow, emptyPiece.currentRow] = [emptyPiece.currentRow, pieceToMove.currentRow];
+                    [pieceToMove.currentCol, emptyPiece.currentCol] = [emptyPiece.currentCol, pieceToMove.currentCol];
+                    
+                    emptySlot.row = randomNeighbor.row;
+                    emptySlot.col = randomNeighbor.col;
+                }
+            }
+        }
+
+        function renderBoard() {
+            puzzleArea.innerHTML = '';
+            puzzleArea.style.gridTemplateColumns = `repeat(${gridSize}, 1fr)`;
+            puzzleArea.style.gridTemplateRows = `repeat(${gridSize}, 1fr)`;
+            calculatePieceSize(); 
+
+            const pieceGrid = Array(gridSize).fill(null).map(() => Array(gridSize).fill(null));
+            pieces.forEach(p => {
+                pieceGrid[p.currentRow][p.currentCol] = p;
+            });
+
+            for (let r = 0; r < gridSize; r++) {
+                for (let c = 0; c < gridSize; c++) {
+                    const pieceData = pieceGrid[r][c];
+                    const pieceElement = document.createElement('div');
+                    pieceElement.classList.add('puzzle-piece');
+                    pieceElement.style.width = `${pieceSize}px`;
+                    pieceElement.style.height = `${pieceSize}px`;
+
+                    if (pieceData.isEmpty) {
+                        pieceElement.classList.add('empty-piece');
+                    } else {
+                        pieceElement.style.backgroundImage = `url(${currentImageSrc})`;
+                        const bgPosX = -(pieceData.originalCol * pieceSize) + 'px';
+                        const bgPosY = -(pieceData.originalRow * pieceSize) + 'px';
+                        pieceElement.style.backgroundPosition = `${bgPosX} ${bgPosY}`;
+                        pieceElement.style.backgroundSize = `${gridSize * pieceSize}px ${gridSize * pieceSize}px`;
+                    }
+                    
+                    pieceElement.dataset.row = r;
+                    pieceElement.dataset.col = c;
+                    pieceElement.addEventListener('click', () => handlePieceClick(r, c));
+                    puzzleArea.appendChild(pieceElement);
+                }
+            }
+        }
+
+        function handlePieceClick(row, col) {
+            if (!gameStarted) return;
+
+            const clickedPieceData = pieces.find(p => p.currentRow === row && p.currentCol === col);
+            if (clickedPieceData.isEmpty) return; 
+
+            const dr = Math.abs(row - emptySlot.row);
+            const dc = Math.abs(col - emptySlot.col);
+
+            if ((dr === 1 && dc === 0) || (dr === 0 && dc === 1)) {
+                const emptyPieceData = pieces.find(p => p.isEmpty);
+
+                [clickedPieceData.currentRow, emptyPieceData.currentRow] = [emptyPieceData.currentRow, clickedPieceData.currentRow];
+                [clickedPieceData.currentCol, emptyPieceData.currentCol] = [emptyPieceData.currentCol, clickedPieceData.currentCol];
+                
+                emptySlot.row = row;
+                emptySlot.col = col;
+
+                moves++;
+                movesCounter.textContent = `手数: ${moves}回`;
+                renderBoard(); 
+                checkWinCondition();
+            }
+        }
+
+        function checkWinCondition() {
+            for (const piece of pieces) {
+                if (piece.currentRow !== piece.originalRow || piece.currentCol !== piece.originalCol) {
+                    return false; 
+                }
+            }
+            gameStarted = false;
+            clearInterval(timerInterval);
+            startButton.textContent = 'スタート';
+            startButton.classList.remove('disabled-button');
+            startButton.disabled = false;
+
+            finalTimeDisplay.textContent = seconds;
+            finalMovesDisplay.textContent = moves;
+            nameModal.style.display = 'flex';
+            return true;
+        }
+
+        function startTimer() {
+            seconds = 0;
+            moves = 0;
+            timerDisplay.textContent = `時間: ${seconds}秒`;
+            movesCounter.textContent = `手数: ${moves}回`;
+            clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                seconds++;
+                timerDisplay.textContent = `時間: ${seconds}秒`;
+            }, 1000);
+        }
+
+        function initGame() {
+            gameStarted = true;
+            startButton.textContent = 'プレイ中...';
+            startButton.classList.add('disabled-button');
+            startButton.disabled = true;
+
+            gridSize = parseInt(difficultySelect.value);
+            const selectedOption = imageSelect.options[imageSelect.selectedIndex];
+            currentImageSrc = selectedOption.value;
+            currentImageName = selectedOption.textContent;
+            
+            const img = new Image();
+            img.onload = () => {
+                createPieces();
+                shufflePieces();
+                renderBoard(); 
+                startTimer();
+            };
+            img.onerror = () => {
+                console.error("画像の読み込みに失敗しました:", currentImageSrc);
+                // alert("画像の読み込みに失敗しました。別のイラストを選んでください。"); // Replaced with custom modal
+                showCustomAlert("画像の読み込みに失敗しました。別のイラストを選んでください。");
+                gameStarted = false;
+                startButton.textContent = 'スタート';
+                startButton.classList.remove('disabled-button');
+                startButton.disabled = false;
+            }
+            img.src = currentImageSrc;
+            previewImageElement.src = currentImageSrc; 
+        }
+
+        // --- Ranking Logic ---
+        async function saveScore() {
+            if (!db || !userId) {
+                // alert("ランキング機能が利用できません。Firebaseの接続を確認してください。"); // Replaced
+                showCustomAlert("ランキング機能が利用できません。Firebaseの接続を確認してください。");
+                nameModal.style.display = 'none';
+                return;
+            }
+            const playerName = playerNameInput.value.trim() || "ななしさん";
+            if (playerName.length > 10) {
+                // alert("名前は10文字以内で入力してください。"); // Replaced
+                showCustomAlert("名前は10文字以内で入力してください。");
+                return;
+            }
+
+            try {
+                const rankingsCollection = collection(db, `artifacts/${appId}/public/data/slidePuzzleRankings`);
+                await addDoc(rankingsCollection, {
+                    playerName: playerName,
+                    timeSeconds: seconds,
+                    moves: moves,
+                    difficulty: `${gridSize}x${gridSize}`,
+                    imageName: currentImageName,
+                    timestamp: serverTimestamp(),
+                    userId: userId 
+                });
+                // alert("記録しました！"); // Replaced
+                showCustomAlert("記録しました！");
+                nameModal.style.display = 'none';
+                playerNameInput.value = ''; 
+            } catch (error) {
+                console.error("Error saving score: ", error);
+                // alert(`記録に失敗しました: ${error.message}`); // Replaced
+                showCustomAlert(`記録に失敗しました: ${error.message}`);
+            }
+        }
+
+        function loadRankings() {
+            if (!db) {
+                 rankingList.innerHTML = '<p class="text-gray-500 text-center">ランキングは現在利用できません。</p>';
+                return;
+            }
+            const rankingsCollection = collection(db, `artifacts/${appId}/public/data/slidePuzzleRankings`);
+            // Query only by timeSeconds. We'll sort by moves and limit client-side.
+            const q = query(rankingsCollection, orderBy("timeSeconds", "asc")); 
+
+            onSnapshot(q, (querySnapshot) => {
+                rankingList.innerHTML = ''; 
+                if (querySnapshot.empty) {
+                    rankingList.innerHTML = '<p class="text-gray-500 text-center">まだランキング記録がありません。</p>';
+                    return;
+                }
+
+                const allRankings = [];
+                querySnapshot.forEach((doc) => {
+                    allRankings.push(doc.data());
+                });
+
+                // Sort client-side: first by timeSeconds (already partially done by query), then by moves
+                allRankings.sort((a, b) => {
+                    if (a.timeSeconds === b.timeSeconds) {
+                        return a.moves - b.moves; // Ascending moves
+                    }
+                    return a.timeSeconds - b.timeSeconds; // Ascending time
+                });
+
+                const top10Rankings = allRankings.slice(0, 10); // Get top 10
+
+                let rank = 1;
+                top10Rankings.forEach((data) => {
+                    const listItem = document.createElement('li');
+                    listItem.classList.add('ranking-item', 'flex', 'justify-between', 'items-center');
+                    listItem.innerHTML = `
+                        <span class="font-semibold">${rank}. ${data.playerName}</span>
+                        <span class="text-xs text-gray-600">${data.imageName} (${data.difficulty})</span>
+                        <span class="text-blue-600">${data.timeSeconds}秒 / ${data.moves}手</span>
+                    `;
+                    rankingList.appendChild(listItem);
+                    rank++;
+                });
+            }, (error) => {
+                console.error("Error loading rankings: ", error);
+                rankingList.innerHTML = `<p class="text-red-500 text-center">ランキングの読み込みに失敗しました。コンソールで詳細を確認してください。</p>`;
+            });
+        }
+
+        // --- Event Listeners ---
+        startButton.addEventListener('click', initGame);
+        
+        resetButton.addEventListener('click', () => {
+            if (gameStarted) {
+                shufflePieces();
+                renderBoard();
+                startTimer(); 
+            } else {
+                initGame();
+            }
+        });
+
+        previewButton.addEventListener('click', () => {
+            if (currentImageSrc) {
+                previewImageElement.src = currentImageSrc;
+                previewImageContainer.style.display = 'flex';
+            } else {
+                // alert("まずイラストを選んでゲームを開始してください。"); // Replaced
+                showCustomAlert("まずイラストを選んでゲームを開始してください。");
+            }
+        });
+        closePreviewButton.addEventListener('click', () => {
+            previewImageContainer.style.display = 'none';
+        });
+
+        submitScoreButton.addEventListener('click', saveScore);
+        cancelScoreButton.addEventListener('click', () => {
+            nameModal.style.display = 'none';
+            playerNameInput.value = '';
+        });
+        
+        imageSelect.addEventListener('change', (e) => {
+            currentImageSrc = e.target.value;
+            currentImageName = e.target.options[e.target.selectedIndex].text;
+        });
+
+        difficultySelect.addEventListener('change', (e) => {
+            gridSize = parseInt(e.target.value);
+        });
+
+        // --- Custom Alert Modal ---
+        function showCustomAlert(message) {
+            const existingModal = document.getElementById('custom-alert-modal');
+            if (existingModal) {
+                existingModal.remove();
+            }
+
+            const alertModal = document.createElement('div');
+            alertModal.id = 'custom-alert-modal';
+            alertModal.classList.add('modal');
+            alertModal.style.display = 'flex';
+
+            const alertContent = document.createElement('div');
+            alertContent.classList.add('modal-content', 'p-6', 'rounded-lg', 'shadow-xl', 'w-11/12', 'max-w-sm');
+            
+            const alertMessage = document.createElement('p');
+            alertMessage.classList.add('text-lg', 'mb-4');
+            alertMessage.textContent = message;
+            alertContent.appendChild(alertMessage);
+
+            const closeButton = document.createElement('button');
+            closeButton.classList.add('game-button-blue', 'w-full');
+            closeButton.textContent = 'OK';
+            closeButton.onclick = () => {
+                alertModal.remove();
+            };
+            alertContent.appendChild(closeButton);
+            alertModal.appendChild(alertContent);
+            document.body.appendChild(alertModal);
+        }
+
+
+        // --- Initial Setup ---
+        window.onload = () => {
+            populateImageSelect();
+            initFirebase(); 
+            puzzleArea.innerHTML = '<p class="text-gray-500 text-center p-10">イラストとむずかしさを選んで「スタート」ボタンを押してね！</p>';
+        };
+
+    </script>
+</body>
+</html>
